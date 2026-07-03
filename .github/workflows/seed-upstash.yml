@@ -1,10 +1,10 @@
 # Feed the self-hosted dashboard's Upstash Redis on a schedule.
-# 给自托管仪表板的 Upstash Redis 定时喂数据（主要点亮供应链/韧性/贸易等"读缓存"面板）。
+# 给自托管仪表板的 Upstash Redis 定时喂数据（点亮宏观/商品/金融等"读缓存"面板）。
 #
 # 前置：在仓库 Settings → Secrets and variables → Actions 添加：
 #   UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN   (必需)
-#   GROQ_API_KEY / OPENROUTER_API_KEY                  (可选：regional-briefs 的 LLM)
-#   FRED_API_KEY / EIA_API_KEY / NASA_FIRMS_API_KEY / FINNHUB_API_KEY ... (可选)
+#   GROQ_API_KEY / OPENROUTER_API_KEY                  (可选：AI 简报/推演的 LLM)
+#   FRED_API_KEY / EIA_API_KEY / FINNHUB_API_KEY ...   (可选：增强部分数据源)
 name: seed-upstash
 
 on:
@@ -19,7 +19,7 @@ concurrency:
 jobs:
   seed:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     env:
       UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
       UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
@@ -28,7 +28,6 @@ jobs:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
       EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
-      NASA_FIRMS_API_KEY: ${{ secrets.NASA_FIRMS_API_KEY }}
       FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
     steps:
       - uses: actions/checkout@v4
@@ -48,19 +47,45 @@ jobs:
             exit 1
           fi
 
-      - name: Run seeders (premium-relevant + core)
+      - name: Run seeders (macro / commodity / finance + core)
         run: |
-          set +e   # 单个 seeder 失败不影响其余
-          run() { echo "::group::$1"; node "scripts/$1.mjs"; echo "exit=$?"; echo "::endgroup::"; }
-          # 供应链 / 韧性 / 贸易（Pro 面板数据）
-          run seed-bundle-resilience-validation
+          set +e   # 单个 seeder 失败不影响其余；每个封顶 5 分钟
+          run() { local s="$1"; shift; echo "::group::$s $*"; timeout 300 node "scripts/$s.mjs" "$@"; echo "exit=$?"; echo "::endgroup::"; }
+
+          # --- 市场 / 金融 ---
+          run seed-market-quotes
+          run seed-market-breadth
+          run seed-commodity-quotes
+          run seed-crypto-quotes
+          run seed-crypto-sectors
+          run seed-stablecoin-markets
+          run seed-economic-calendar
+          run seed-prediction-markets
+
+          # --- 宏观 ---
+          run seed-national-debt
+          run seed-consumer-prices --force
+          run seed-sanctions-pressure
+
+          # --- 能源 / 商品 ---
+          run seed-jodi-oil
+          run seed-jodi-gas
+          run seed-iea-oil-stocks
+          run seed-gie-gas-storage
+          run seed-energy-intelligence
+          run seed-owid-energy-mix
+          run seed-chokepoint-flows
+          run seed-fao-food-price-index
+          run seed-gold-cb-reserves
+          run seed-gold-etf-flows
+
+          # --- 供应链 / 贸易 ---
+          run seed-supply-chain-trade
           run seed-comtrade-bilateral-hs4
           run seed-trade-flows
-          run seed-jodi-oil
-          run seed-iea-oil-stocks
-          run seed-chokepoint-flows
-          # 需要 LLM，仅在配了 key 时才有意义
-          if [ -n "$GROQ_API_KEY" ] || [ -n "$OPENROUTER_API_KEY" ]; then run seed-regional-briefs; fi
-          # 核心公共数据（无需 key）
+
+          # --- 韧性 / 核心 ---
+          run seed-bundle-resilience
           run seed-earthquakes
+
           echo "seeding pass complete"

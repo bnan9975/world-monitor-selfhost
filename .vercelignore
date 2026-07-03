@@ -18,3 +18,15 @@ target/
 
 # Common local artifacts
 .DS_Store
+
+# --- Self-host: stay under Vercel Hobby's 12-serverless-function limit ---
+# Exclude the self-contained MCP-server + OAuth subsystem (an advanced Pro
+# feature the dashboard does not use). Verified: no core/edge function imports
+# any of these, so excluding them from the deployment is safe. This drops the
+# Node serverless-function count from 21 to 3 (well under the Hobby cap of 12).
+api/mcp.ts
+api/mcp/
+api/mcp-proxy.ts
+api/oauth/
+api/internal/mcp-grant-mint.ts
+api/user/mcp-revoke.ts

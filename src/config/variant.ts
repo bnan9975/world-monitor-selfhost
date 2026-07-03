@@ -29,5 +29,8 @@ export const SITE_VARIANT: string = (() => {
     return buildVariant;
   }
 
-  return 'full';
+  // Self-host: honour the build-time VITE_VARIANT on our own domain instead of
+  // hard-forcing 'full' (upstream forced 'full' because one build served every
+  // variant by subdomain; a single-tenant self-host has no such subdomains).
+  return buildVariant;
 })();
