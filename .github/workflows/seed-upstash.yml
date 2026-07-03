@@ -9,8 +9,8 @@ name: seed-upstash
 
 on:
   schedule:
-    - cron: "17 * * * *"      # 每小时的第 17 分钟跑一次（错峰）
-  workflow_dispatch: {}        # 也可在 Actions 页手动触发
+    - cron: "17 */5 * * *"     # 每 5 小时跑一次（UTC 0/5/10/15/20 时的第 17 分）
+  workflow_dispatch: {}        # 手动更新按钮：Actions → seed-upstash → "Run workflow"
 
 concurrency:
   group: seed-upstash
