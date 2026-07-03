@@ -23,12 +23,20 @@ jobs:
     env:
       UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
       UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
-      # 可选 key（缺失时相关 seeder 自动降级/跳过）
+      # 可选 key（缺失时相关 seeder 自动降级/跳过；填 = 该源自动点亮）
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
       EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
       FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+      ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+      COINGECKO_DEMO_API_KEY: ${{ secrets.COINGECKO_DEMO_API_KEY }}
+      WTO_API_KEY: ${{ secrets.WTO_API_KEY }}
+      NASA_FIRMS_API_KEY: ${{ secrets.NASA_FIRMS_API_KEY }}
+      ACLED_EMAIL: ${{ secrets.ACLED_EMAIL }}
+      ACLED_PASSWORD: ${{ secrets.ACLED_PASSWORD }}
+      UCDP_ACCESS_TOKEN: ${{ secrets.UCDP_ACCESS_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -61,11 +69,16 @@ jobs:
           run seed-stablecoin-markets
           run seed-economic-calendar
           run seed-prediction-markets
+          run seed-fear-greed        # 恐慌贪婪 + 仓位（keyless；FRED 填后子分更全）
+          run seed-etf-flows         # BTC-ETF 净流入（keyless）
+          run seed-gulf-quotes       # 海湾/MENA 股（keyless）
 
           # --- 宏观 ---
           run seed-national-debt
           run seed-consumer-prices --force
           run seed-sanctions-pressure
+          run seed-bis-data          # BIS 政策利率/REER/信贷（keyless）
+          run seed-economy           # FRED 集群：CPI/利率/收益率曲线/利差（需 FRED_API_KEY）
 
           # --- 能源 / 商品 ---
           run seed-jodi-oil
@@ -74,15 +87,29 @@ jobs:
           run seed-gie-gas-storage
           run seed-energy-intelligence
           run seed-owid-energy-mix
-          run seed-chokepoint-flows
+          run seed-portwatch-chokepoints-ref   # chokepoint 上游（keyless；须在 flows 之前）
+          run seed-chokepoint-baselines        # chokepoint 上游（keyless；须在 flows 之前）
+          run seed-chokepoint-flows            # 现在有上游数据可归约
           run seed-fao-food-price-index
           run seed-gold-cb-reserves
           run seed-gold-etf-flows
+          run seed-bundle-energy-sources       # 管道/储库/SPR/中断 ~10 面板（需 EIA_API_KEY）
 
           # --- 供应链 / 贸易 ---
-          run seed-supply-chain-trade
+          run seed-supply-chain-trade          # 含 WTO（需 WTO_API_KEY 才有 3 个贸易面板）
           run seed-comtrade-bilateral-hs4
           run seed-trade-flows
+
+          # --- 情报 / 新闻 ---
+          run seed-gdelt-intel       # GDELT 6 主题情报 + 语调/量时间线（keyless）
+          run seed-insights          # 风险评分/聊天上下文（keyless）
+
+          # --- 基础设施 / 气候 / 网络 ---
+          run seed-submarine-cables  # 海底电缆（换掉冻结的静态数组）
+          run seed-weather-alerts    # NWS 天气预警（keyless）
+          run seed-radiation-watch   # EPA/Safecast 辐射（keyless）
+          run seed-cyber-threats     # Feodo/C2Intel IOC（keyless 部分；URLhaus/OTX 需 key）
+          run seed-internet-outages  # Cloudflare Radar 断网/DDoS（需 CLOUDFLARE_API_TOKEN）
 
           # --- 韧性 / 核心 ---
           run seed-bundle-resilience
