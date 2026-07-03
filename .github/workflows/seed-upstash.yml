@@ -1,0 +1,66 @@
+# Feed the self-hosted dashboard's Upstash Redis on a schedule.
+# 给自托管仪表板的 Upstash Redis 定时喂数据（主要点亮供应链/韧性/贸易等"读缓存"面板）。
+#
+# 前置：在仓库 Settings → Secrets and variables → Actions 添加：
+#   UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN   (必需)
+#   GROQ_API_KEY / OPENROUTER_API_KEY                  (可选：regional-briefs 的 LLM)
+#   FRED_API_KEY / EIA_API_KEY / NASA_FIRMS_API_KEY / FINNHUB_API_KEY ... (可选)
+name: seed-upstash
+
+on:
+  schedule:
+    - cron: "17 * * * *"      # 每小时的第 17 分钟跑一次（错峰）
+  workflow_dispatch: {}        # 也可在 Actions 页手动触发
+
+concurrency:
+  group: seed-upstash
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+      # 可选 key（缺失时相关 seeder 自动降级/跳过）
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+      NASA_FIRMS_API_KEY: ${{ secrets.NASA_FIRMS_API_KEY }}
+      FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install deps (skip postinstall/blog)
+        run: npm ci --ignore-scripts
+
+      - name: Guard required secrets
+        run: |
+          if [ -z "$UPSTASH_REDIS_REST_URL" ] || [ -z "$UPSTASH_REDIS_REST_TOKEN" ]; then
+            echo "::error::Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in repo Actions secrets."
+            exit 1
+          fi
+
+      - name: Run seeders (premium-relevant + core)
+        run: |
+          set +e   # 单个 seeder 失败不影响其余
+          run() { echo "::group::$1"; node "scripts/$1.mjs"; echo "exit=$?"; echo "::endgroup::"; }
+          # 供应链 / 韧性 / 贸易（Pro 面板数据）
+          run seed-bundle-resilience-validation
+          run seed-comtrade-bilateral-hs4
+          run seed-trade-flows
+          run seed-jodi-oil
+          run seed-iea-oil-stocks
+          run seed-chokepoint-flows
+          # 需要 LLM，仅在配了 key 时才有意义
+          if [ -n "$GROQ_API_KEY" ] || [ -n "$OPENROUTER_API_KEY" ]; then run seed-regional-briefs; fi
+          # 核心公共数据（无需 key）
+          run seed-earthquakes
+          echo "seeding pass complete"
